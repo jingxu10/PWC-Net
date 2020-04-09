@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 from corr import Correlation, Correlation1d
@@ -36,9 +37,19 @@ def test_correlation():
 #     if A.grad is not None and B.grad is not None:
 #         print('Backward pass test passed')
 
-    A = torch.randn(2,3,100,100, requires_grad=True)
-    B = torch.randn(2,3,100,100, requires_grad=True)
+    if os.path.isfile('A.out.npy'):
+        A = torch.from_numpy(np.load('A.out.npy'))
+        A.requires_grad = True
+    else:
+        A = torch.randn(2,3,100,100, requires_grad=True)
+        np.save('A.out', A.detach().numpy())
 
+    if os.path.isfile('B.out.npy'):
+        B = torch.from_numpy(np.load('B.out.npy'))
+        B.requires_grad = True
+    else:
+        B = torch.randn(2,3,100,100, requires_grad=True)
+        np.save('B.out', B.detach().numpy())
     model = Correlation(3, 3, 20, 1, 2, 1).cuda()
     y = model(A.cuda(), B.cuda())
     print(y.shape)
@@ -113,9 +124,19 @@ def test_correlation1d():
     # if A.grad is not None and B.grad is not None:
     #     print('Backward pass test passed')
 
-    A = torch.randn(2,3,100,100, requires_grad=True)
-    B = torch.randn(2,3,100,100, requires_grad=True)
+    if os.path.isfile('A.out.npy'):
+        A = torch.from_numpy(np.load('A.out.npy'))
+        A.requires_grad = True
+    else:
+        A = torch.randn(2,3,100,100, requires_grad=True)
+        np.save('A.out', A.detach().numpy())
 
+    if os.path.isfile('B.out.npy'):
+        B = torch.from_numpy(np.load('B.out.npy'))
+        B.requires_grad = True
+    else:
+        B = torch.randn(2,3,100,100, requires_grad=True)
+        np.save('B.out', B.detach().numpy())
     model = Correlation1d(20, 1, 20, 1, 1, 1)
     y = model(A.cuda(), B.cuda())
     print(y.size())
@@ -133,6 +154,6 @@ def test_correlation1d():
 
 if __name__=='__main__':
     test_correlation()
-    test_correlation1d()
+    #test_correlation1d()
     #test_correlation_0()
     #test_correlation1d_0()
