@@ -21,11 +21,14 @@ setup(
 				'correlation_package/src/corr_cuda.cpp',
 				'correlation_package/src/corr_cuda_kernel.cu'
 			],
+		),
+		CUDAExtension(
+			name='corr1d_gpu',
+			sources=[
+				'correlation_package/src/corr1d_cuda.cpp',
+				'correlation_package/src/corr1d_cuda_kernel.cu'
+			],
 		)
-		# CppExtension(
-		# 	name='corr1d_gpu',
-		# 	sources=['correlation_package/src/corr1d_cuda.cpp'],
-		# )
 	],
 	cmdclass={
 		'build_ext': BuildExtension

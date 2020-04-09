@@ -1,31 +1,27 @@
-#include <THC/THC.h>
+#include <ATen/cuda/CUDAContext.h>
+#include <torch/extension.h>
+#include <cuda_runtime.h>
 #include "corr1d_cuda_kernel.h"
 
-extern THCState *state;
-
 // == Forward
-int corr1d_cuda_forward(THCudaTensor *input1,
-                      THCudaTensor *input2,
-                      THCudaTensor *rbot1,
-                      THCudaTensor *rbot2,
-                      THCudaTensor *output,
-                      int pad_size,
-                      int kernel_size,
-                      int max_displacement,
-                      int stride1,
-                      int stride2,
-                      int corr_type_multiply
-                      //single_direction=0 
-                      )
+at::Tensor corr1d_cuda_forward(at::Tensor &input1,
+                        at::Tensor &input2,
+                        int pad_size,
+                        int kernel_size,
+                        int max_displacement,
+                        int stride1,
+                        int stride2,
+                        int corr_type_multiply
+                        //single_direction=0
+                        )
 {
-
     // TODO: Shapechecks
 
-    int batchSize = input1->size[0];
+    int batchSize = input1.size(0);
 
-    long nInputPlane = input1->size[1];
-    long nInputRows = input1->size[2];
-    long nInputCols = input1->size[3];
+    long nInputPlane = input1.size(1);
+    long nInputRows = input1.size(2);
+    long nInputCols = input1.size(3);
     long inputWidthHeight = nInputRows * nInputCols;
 
     long kernel_radius_ = (kernel_size - 1) / 2;
@@ -44,27 +40,23 @@ int corr1d_cuda_forward(THCudaTensor *input1,
     int x_shift = -neighborhood_grid_radius_;
 
     // Number of output channels amounts to displacement combinations in X direction only!!
-    int nOutputPlane = neighborhood_grid_width_;//Same, because 1D X-correlation 
+    int nOutputPlane = neighborhood_grid_width_;//Same, because 1D X-correlation
 
     // Inputs
-    float * input1_data = THCudaTensor_data(state, input1);
-    float * input2_data = THCudaTensor_data(state, input2);
+    float * input1_data = input1.data_ptr<float>();
+    float * input2_data = input2.data_ptr<float>();
 
     // Outputs
-    THCudaTensor_resize4d(state, output, batchSize, nOutputPlane, nOutputRows, nOutputCols);
-    THCudaTensor_zero(state, output); // added by Jinwei
-    float * output_data = THCudaTensor_data(state, output);
+	at::Tensor output = at::zeros({batchSize, nOutputPlane, nOutputRows, nOutputCols}, torch::CUDA(at::kFloat));
+    float * output_data = output.data_ptr<float>();
 
-    THCudaTensor_resize4d(state, rbot1, batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth);
-    THCudaTensor_resize4d(state, rbot2, batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth);
+	at::Tensor rbot1 = at::zeros({batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth}, torch::CUDA(at::kFloat));
+	at::Tensor rbot2 = at::zeros({batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth}, torch::CUDA(at::kFloat));
 
-    THCudaTensor_zero(state, rbot1); // added by Jinwei
-    THCudaTensor_zero(state, rbot2); // added by Jinwei
+    float * rbot1_data = rbot1.data_ptr<float>();
+    float * rbot2_data = rbot2.data_ptr<float>();
 
-    float * rbot1_data = THCudaTensor_data(state, rbot1);
-    float * rbot2_data = THCudaTensor_data(state, rbot2);
-
-    cudaStream_t stream = THCState_getCurrentStream(state);
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
     int pwidthheight = paddedbottomwidth * paddedbottomheight;
 
@@ -74,45 +66,35 @@ int corr1d_cuda_forward(THCudaTensor *input1,
 
     CorrelateData_ongpu_1d(rbot1_data,rbot2_data,output_data,batchSize,nOutputCols,nOutputRows,nOutputPlane,max_displacement,x_shift,neighborhood_grid_width_,kernel_radius_,kernel_size,stride1,stride2,paddedbottomwidth,paddedbottomheight,nInputPlane,corr_type_multiply,stream);
 
-//    THCudaTensor_free(state, input1);
-//    THCudaTensor_free(state, input2);
-    THCudaTensor_free(state, rbot1);
-    THCudaTensor_free(state, rbot2);
-
-    return 1;
-
+    return output;
 }
 
-int corr1d_cuda_backward(THCudaTensor *input1,
-                        THCudaTensor *input2,
-                        THCudaTensor *rbot1,
-                        THCudaTensor *rbot2,
-                        THCudaTensor *gradOutput,
-                        THCudaTensor *gradInput1,
-                        THCudaTensor *gradInput2,
-                        int pad_size,
-                        int kernel_size,
-                        int max_displacement,
-                        int stride1,
-                        int stride2,
-                        int corr_type_multiply
-                        // single_direction=0
-                        )
+int corr1d_cuda_backward(at::Tensor &input1,
+                         at::Tensor &input2,
+                         at::Tensor &gradOutput,
+                         at::Tensor &gradInput1,
+                         at::Tensor &gradInput2,
+                         int pad_size,
+                         int kernel_size,
+                         int max_displacement,
+                         int stride1,
+                         int stride2,
+                         int corr_type_multiply
+                         // single_direction=0
+                         )
 {
 
-    float * input1_data = THCudaTensor_data(state, input1);
-    float * input2_data = THCudaTensor_data(state, input2);
+    float * input1_data = input1.data_ptr<float>();
+    float * input2_data = input2.data_ptr<float>();
 
-    long nInputCols = input1->size[3];
-    long nInputRows = input1->size[2];
-    long nInputPlane = input1->size[1];
-    long batchSize = input1->size[0];
+    long nInputCols = input1.size(3);
+    long nInputRows = input1.size(2);
+    long nInputPlane = input1.size(1);
+    long batchSize = input1.size(0);
 
- //   THCudaTensor_resizeAs(state, gradInput1, input1);
- //   THCudaTensor_resizeAs(state, gradInput2, input2);
-    float * gradOutput_data = THCudaTensor_data(state, gradOutput);
-    float * gradInput1_data = THCudaTensor_data(state, gradInput1);
-    float * gradInput2_data = THCudaTensor_data(state, gradInput2);
+    float * gradOutput_data = gradOutput.data_ptr<float>();
+    float * gradInput1_data = gradInput1.data_ptr<float>();
+    float * gradInput2_data = gradInput2.data_ptr<float>();
 
     long inputWidthHeight = nInputRows * nInputCols;
 
@@ -134,18 +116,14 @@ int corr1d_cuda_backward(THCudaTensor *input1,
     // Number of output channels amounts to displacement combinations in X direction only!!
     int nOutputPlane = neighborhood_grid_width_; // Same, because 1D X-correlation
 
-    THCudaTensor_resize4d(state, rbot1, batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth);
-    THCudaTensor_resize4d(state, rbot2, batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth);
-
-    THCudaTensor_zero(state, rbot1); // added by Jinwei
-    THCudaTensor_zero(state, rbot2); // added by Jinwei
-
-    float * rbot1_data = THCudaTensor_data(state, rbot1);
-    float * rbot2_data = THCudaTensor_data(state, rbot2);
+	at::Tensor rbot1 = at::zeros({batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth}, torch::CUDA(at::kFloat));
+	at::Tensor rbot2 = at::zeros({batchSize, nInputPlane, paddedbottomheight, paddedbottomwidth}, torch::CUDA(at::kFloat));
+    float * rbot1_data = rbot1.data_ptr<float>();
+    float * rbot2_data = rbot2.data_ptr<float>();
 
     int pwidthheight = paddedbottomwidth * paddedbottomheight;
 
-    cudaStream_t stream = THCState_getCurrentStream(state);
+    cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
     blob_rearrange_ongpu_1d(input1_data,rbot1_data,batchSize,nInputPlane,nInputCols,nInputRows,inputWidthHeight,pad_size,pwidthheight,stream);
 
@@ -155,11 +133,10 @@ int corr1d_cuda_backward(THCudaTensor *input1,
 
     CorrelateDataBackward_ongpu_1d(rbot1_data,rbot2_data,gradOutput_data,gradInput1_data,gradInput2_data,batchSize,nOutputCols,nOutputRows,nOutputPlane,max_displacement,x_shift,neighborhood_grid_width_,kernel_radius_,stride1,stride2,nInputCols,nInputRows,paddedbottomwidth,paddedbottomheight,nInputPlane,pad_size,corr_type_multiply,stream);
 
-  //  THCudaTensor_free(state, input1);
-  //  THCudaTensor_free(state, input2);
-    THCudaTensor_free(state, rbot1);
-    THCudaTensor_free(state, rbot2);
-
     return 1;
+}
 
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+  m.def("corr1d_cuda_forward", &corr1d_cuda_forward, "corr1d forward (CUDA)");
+  m.def("corr1d_cuda_backward", &corr1d_cuda_backward, "corr1d backward (CUDA)");
 }
