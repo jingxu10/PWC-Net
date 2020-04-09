@@ -55,6 +55,7 @@ def test_correlation():
     print(y.shape)
     print(y.nelement())
     print(y)
+    np.save('y.out', y.cpu().detach().numpy())
 
     print('Module interface test passed')
 
@@ -65,6 +66,8 @@ def test_correlation():
 
     if A.grad is not None and B.grad is not None:
         print('Backward pass test passed')
+        np.save('A.grad', A.cpu().grad.detach().numpy())
+        np.save('B.grad', B.cpu().grad.detach().numpy())
 
 def test_correlation_0():
     #model = correlation(0, 1, 0, 1, 1, 1)
